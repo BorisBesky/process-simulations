@@ -321,6 +321,7 @@
                                 collectedSnapshot.channelStates.set(channel.id, []);
                             }
                             logMessage(`P${event.to} starts recording on channel P${event.from}->P${event.to}.`);
+                            updateSnapshotDisplay();
                             resolve();
                             break;
                         case 'SEND_MARKER':
