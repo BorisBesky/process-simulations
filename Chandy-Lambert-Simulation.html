@@ -222,7 +222,9 @@
 
                                 channels.forEach(channel => {
                                     if (channel.to === vp.id) {
-                                        if (channel.id !== event.channelId) {
+                                        // For snapshot initiator (event.channelId is null), record on all incoming channels
+                                        // For other processes, record on all channels except the one the marker came from
+                                        if (event.channelId === null || channel.id !== event.channelId) {
                                             vp.isRecording.set(channel.id, true);
                                             replayQueue.push({ type: 'START_RECORDING', from: channel.from, to: channel.to });
                                         }
@@ -318,9 +320,12 @@
                         case 'START_RECORDING':
                             if (channel) {
                                 channel.line.classList.add('recording');
+                                // Move recording line to front (last child = on top in SVG)
+                                channel.line.parentNode.appendChild(channel.line);
                                 collectedSnapshot.channelStates.set(channel.id, []);
                             }
                             logMessage(`P${event.to} starts recording on channel P${event.from}->P${event.to}.`);
+                            updateSnapshotDisplay();
                             resolve();
                             break;
                         case 'SEND_MARKER':
@@ -376,6 +381,8 @@
                         case 'START_RECORDING':
                             if (channel) {
                                 channel.line.classList.add('recording');
+                                // Move recording line to front (last child = on top in SVG)
+                                channel.line.parentNode.appendChild(channel.line);
                                 collectedSnapshot.channelStates.set(channel.id, []);
                             }
                             logMessage(`P${event.to} starts recording on channel P${event.from}->P${event.to}.`);
