@@ -74,12 +74,14 @@ body.bg-gray-900.overflow-hidden { overflow: hidden; }
     transition: stroke 0.3s ease;
 }
 #channel-svg .channel-line.recording {
-    stroke: #f59e0b; /* amber-500 */
-    stroke-dasharray: 5, 5;
-    animation: dash-flow 1s linear infinite;
+    stroke: #f59e0b !important; /* amber-500 - force override */
+    stroke-width: 4 !important; /* Make recording lines thicker */
+    stroke-dasharray: 8, 4 !important; /* Longer dashes for better visibility */
+    animation: dash-flow 1.5s linear infinite;
+    z-index: 10; /* Ensure it's on top */
 }
 @keyframes dash-flow {
-    from { stroke-dashoffset: 100; }
+    from { stroke-dashoffset: 24; }
     to { stroke-dashoffset: 0; }
 }
 
