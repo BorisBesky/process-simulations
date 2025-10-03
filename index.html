@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Process Simulations</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root{
+            --bg:#0f1724;
+            --card:#0b1220;
+            --muted:#94a3b8;
+            --accent:#7c3aed;
+            --glass: rgba(255,255,255,0.04);
+        }
+        *{box-sizing:border-box}
+        body{
+            margin:0;
+            font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+            background: linear-gradient(180deg,#071025 0%, #071423 60%);
+            color:#e6eef8;
+            -webkit-font-smoothing:antialiased;
+            -moz-osx-font-smoothing:grayscale;
+            min-height:100vh;
+            padding:40px 24px;
+        }
+        .container{
+            max-width:1000px;
+            margin:0 auto;
+        }
+        header{
+            display:flex;
+            align-items:center;
+            gap:16px;
+            margin-bottom:28px;
+        }
+        .logo{
+            width:64px;height:64px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#06b6d4);display:flex;align-items:center;justify-content:center;font-weight:700;color:white;font-size:22px;box-shadow:0 6px 20px rgba(0,0,0,0.6);
+        }
+        h1{font-size:28px;margin:0}
+        p.lead{color:var(--muted);margin:8px 0 24px}
+
+        .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px}
+        .card{
+            background: linear-gradient(180deg,var(--card), rgba(11,18,32,0.6));
+            border-radius:12px;padding:18px;border:1px solid rgba(255,255,255,0.04);-webkit-backdrop-filter: blur(6px);backdrop-filter: blur(6px);
+            box-shadow: 0 8px 30px rgba(2,6,23,0.6);
+            display:flex;flex-direction:column;gap:12px;
+        }
+        .row-between{display:flex;justify-content:space-between;align-items:start;gap:12px}
+        .features-list{margin:8px 0 0;color:var(--muted);font-size:13px}
+        .card h3{margin:0;font-size:18px}
+        .meta{color:var(--muted);font-size:13px}
+        .desc{color:#cfe5ffcc;font-size:14px;line-height:1.4}
+        .actions{margin-top:auto;display:flex;gap:10px}
+        .btn{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;border:0;background:var(--glass);color:var(--accent);font-weight:600;text-decoration:none}
+        .btn.primary{background:linear-gradient(90deg,var(--accent),#06b6d4);color:white;box-shadow:0 6px 18px rgba(124,58,237,0.22)}
+        .badge{font-size:12px;color:var(--muted);background:transparent;padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,0.03)}
+
+        footer{margin-top:36px;color:var(--muted);font-size:13px;text-align:center}
+
+        @media (max-width:420px){
+            header{align-items:flex-start}
+            .logo{width:56px;height:56px}
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">PS</div>
+            <div>
+                <h1>Process Simulations</h1>
+                <p class="lead">Interactive simulations demonstrating distributed algorithms and process synchronization. Choose a simulation to open it in a new tab.</p>
+            </div>
+        </header>
+
+        <section class="grid">
+            <article class="card">
+                <div class="row-between">
+                    <div>
+                        <h3>Chandy-Lambert Simulation</h3>
+                        <div class="meta">Logical clocks & distributed snapshots</div>
+                    </div>
+                    <div class="badge">Event-driven</div>
+                </div>
+                <div class="desc">This simulation visualizes the Chandy-Lamport global snapshot algorithm for distributed systems. It shows processes, message channels, and how a consistent global snapshot is recorded without stopping the system. Useful for understanding snapshot initiation, marker messages, and how local states and in-transit messages are captured.</div>
+                <ul class="features-list">
+                    <li>Start/stop processes and send messages manually.</li>
+                    <li>Initiate snapshot from any process and observe marker propagation.</li>
+                    <li>Visual trace of in-transit messages recorded by the algorithm.</li>
+                </ul>
+                <div class="actions">
+                    <a class="btn primary" href="Chandy-Lambert-Simulation.html" target="_blank">Open Simulation</a>
+                    <a class="btn" href="#" onclick="alert('No separate docs included. Open the simulation to explore interactively.')">Help</a>
+                </div>
+            </article>
+
+            <article class="card">
+                <div class="row-between">
+                    <div>
+                        <h3>Raft Protocol Simulation</h3>
+                        <div class="meta">Consensus & leader election</div>
+                    </div>
+                    <div class="badge">Consensus</div>
+                </div>
+                <div class="desc">An interactive visualization of the Raft consensus algorithm. Watch leader election, log replication, term changes, and how the cluster handles failures and recoveries. The simulation highlights message flows and state transitions between follower, candidate, and leader roles.</div>
+                <ul class="features-list">
+                    <li>Trigger leader failures and observe re-election.</li>
+                    <li>Append commands to the replicated log and see replication progress.</li>
+                    <li>Inspect per-node state, current term, and commit index.</li>
+                </ul>
+                <div class="actions">
+                    <a class="btn primary" href="Raft-Protocol-Simulation.html" target="_blank">Open Simulation</a>
+                    <a class="btn" href="#" onclick="alert('No separate docs included. Open the simulation to explore interactively.')">Help</a>
+                </div>
+            </article>
+        </section>
+
+        <footer>
+            Built for learning and demos — open a simulation to interact with the models. Files are located in the project root.
+        </footer>
+    </div>
+</body>
+</html>
