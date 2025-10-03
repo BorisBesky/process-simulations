@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chandy-Lambert Snapshot Algorithm</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+        .process {
+            transition: background-color 0.5s ease, border-color 0.5s ease;
+        }
+        .message, .marker {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: white;
+            transition: all 0.1s linear, opacity 0.3s ease;
+            opacity: 1;
+        }
+        .message {
+            background-color: #3b82f6; /* blue-500 */
+        }
+        .marker {
+            background-color: #ef4444; /* red-500 */
+            width: 25px;
+            height: 25px;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 10;
+        }
+        .channel-line {
+            stroke: #9ca3af; /* gray-400 */
+            stroke-width: 2;
+            transition: stroke 0.3s ease;
+        }
+        .recording {
+            stroke: #f59e0b; /* amber-500 */
+            stroke-dasharray: 5, 5;
+            animation: dash-flow 1s linear infinite;
+        }
+        @keyframes dash-flow {
+            from {
+                stroke-dashoffset: 100;
+            }
+            to {
+                stroke-dashoffset: 0;
+            }
+        }
+        .btn-disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex flex-col items-center justify-center h-screen p-4">
+
+    <div class="w-full max-w-7xl mx-auto flex flex-col lg:flex-row gap-4 h-full">
+        <!-- Main Visualization Area -->
+        <div class="flex-grow bg-gray-800 rounded-lg relative overflow-hidden shadow-2xl" id="visualization-container">
+            <svg id="channel-svg" class="absolute top-0 left-0 w-full h-full"></svg>
+        </div>
+
+        <!-- Control and Log Panel -->
+        <div class="lg:w-1/3 w-full bg-gray-800 rounded-lg p-6 flex flex-col shadow-2xl h-full lg:max-h-[90vh]">
+            <h1 class="text-2xl font-bold text-center mb-4 text-cyan-400">Chandy-Lambert Snapshot</h1>
+            <p class="text-sm text-gray-400 text-center mb-6">A distributed algorithm to capture a consistent global state.</p>
+            
+            <div id="main-controls">
+                <div class="flex justify-center mb-4">
+                    <button id="toggle-simulation" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors w-full">Start Simulation</button>
+                </div>
+                 <p class="text-sm text-gray-400 text-center mb-6">Click on a process (circle) to initiate a snapshot.</p>
+            </div>
+            
+            <div id="replay-controls" class="hidden">
+                <p class="text-lg font-semibold text-center mb-2 text-yellow-400">Replay Mode</p>
+                <div class="flex justify-between items-center mb-2 gap-2">
+                    <button id="prev-step" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg transition-colors w-full">Prev</button>
+                    <div id="step-counter" class="text-center font-mono whitespace-nowrap">Step 0 / 0</div>
+                    <button id="next-step" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg transition-colors w-full">Next</button>
+                </div>
+                <div class="flex justify-center mb-4">
+                     <button id="exit-replay" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition-colors w-full mt-2">Exit Replay & Reset</button>
+                </div>
+            </div>
+            
+            <h2 class="text-lg font-semibold mb-2 text-cyan-400 border-b border-gray-600 pb-1">Event Log</h2>
+            <div id="log-container" class="flex-grow bg-gray-900 rounded-md p-3 overflow-y-auto text-sm space-y-2 h-40">
+                <!-- Log messages will appear here -->
+            </div>
+
+            <h2 class="text-lg font-semibold mt-6 mb-2 text-cyan-400 border-b border-gray-600 pb-1">Global Snapshot</h2>
+            <div id="snapshot-container" class="bg-gray-900 rounded-md p-3 overflow-y-auto h-40">
+                <p class="text-gray-500 italic">No snapshot taken yet.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DOM Elements ---
+            const container = document.getElementById('visualization-container');
+            const svg = document.getElementById('channel-svg');
+            const logContainer = document.getElementById('log-container');
+            const snapshotContainer = document.getElementById('snapshot-container');
+            const toggleButton = document.getElementById('toggle-simulation');
+            const mainControls = document.getElementById('main-controls');
+            const replayControls = document.getElementById('replay-controls');
+            const prevStepBtn = document.getElementById('prev-step');
+            const nextStepBtn = document.getElementById('next-step');
+            const exitReplayBtn = document.getElementById('exit-replay');
+            const stepCounter = document.getElementById('step-counter');
+
+            // --- State Variables ---
+            let processCount = 3;
+            let processes = [];
+            let channels = new Map();
+            let messages = [];
+            let simulationRunning = false;
+            let messageIdCounter = 0;
+            let snapshotInProgress = false;
+            let snapshotInitiator = -1;
+            let snapshotId = 0;
+            
+            // Replay state
+            let isReplaying = false;
+            let replayQueue = [];
+            let currentStep = -1;
+            let preSnapshotStates = {};
+            let collectedSnapshot = {};
+
+
+            class Process {
+                constructor(id, x, y) {
+                    this.id = id;
+                    this.state = 0;
+                    this.pos = { x, y };
+                    this.el = this.createElement();
+                }
+
+                createElement() {
+                    const el = document.createElement('div');
+                    el.className = 'process absolute flex flex-col items-center justify-center w-24 h-24 rounded-full border-4 border-cyan-500 bg-gray-700 cursor-pointer';
+                    el.style.left = `${this.pos.x}%`;
+                    el.style.top = `${this.pos.y}%`;
+                    el.style.transform = 'translate(-50%, -50%)';
+                    
+                    const idEl = document.createElement('div');
+                    idEl.className = 'text-lg font-bold';
+                    idEl.textContent = `P${this.id}`;
+                    
+                    const stateEl = document.createElement('div');
+                    stateEl.className = 'text-2xl font-mono';
+                    stateEl.id = `state-${this.id}`;
+                    stateEl.textContent = this.state;
+
+                    el.appendChild(idEl);
+                    el.appendChild(stateEl);
+                    el.onclick = () => this.initiateSnapshot();
+                    container.appendChild(el);
+                    return el;
+                }
+
+                updateStateDisplay() {
+                    document.getElementById(`state-${this.id}`).textContent = this.state;
+                }
+                
+                incrementState() {
+                    this.state++;
+                    this.updateStateDisplay();
+                }
+
+                initiateSnapshot() {
+                    if (snapshotInProgress) {
+                        logMessage('Snapshot already in progress.', 'error');
+                        return;
+                    }
+                    if (isReplaying) {
+                        logMessage('Cannot start a snapshot during replay.', 'error');
+                        return;
+                    }
+                    snapshotInProgress = true;
+                    isReplaying = true;
+                    snapshotId++;
+                    snapshotInitiator = this.id;
+                    
+                    collectedSnapshot = { processStates: new Map(), channelStates: new Map() };
+                    
+                    buildReplayQueue(this.id);
+
+                    simulationRunning = false;
+                    toggleButton.textContent = 'Simulation Paused';
+                    toggleButton.classList.add('btn-disabled');
+
+                    mainControls.classList.add('hidden');
+                    replayControls.classList.remove('hidden');
+                    
+                    logContainer.innerHTML = '';
+                    snapshotContainer.innerHTML = '<p class="text-gray-500 italic">Replay in progress...</p>';
+                    // Hide live messages instead of just fading them to avoid confusion.
+                    messages.forEach(msg => msg.el.style.display = 'none');
+
+                    processes.forEach(p => preSnapshotStates[p.id] = { state: p.state });
+
+                    currentStep = -1;
+                    updateReplayUI();
+                    logMessage(`Snapshot #${snapshotId} initiated by P${this.id}. Starting replay...`, 'snapshot');
+                }
+                
+                resetVisuals() {
+                    this.el.classList.remove('border-red-500', 'bg-red-900');
+                    this.el.classList.add('border-cyan-500', 'bg-gray-700');
+                    channels.forEach(c => c.line.classList.remove('recording'));
+                }
+            }
+            
+            // --- Simulation Logic ---
+
+            function buildReplayQueue(initiatorId) {
+                replayQueue = [];
+                let virtualProcesses = {};
+                const initialStates = {}; // Store states at the moment snapshot is initiated
+
+                // 1. Create a deep copy of the current system state
+                processes.forEach(p => {
+                    initialStates[p.id] = p.state; // Capture state at t0
+                    virtualProcesses[p.id] = {
+                        id: p.id,
+                        state: p.state, // This virtual state will evolve, but we'll record from initialStates
+                        markerReceived: false,
+                        isRecording: new Map(),
+                    };
+                });
+
+                let eventQueue = [];
+
+                // Add snapshot initiation event
+                eventQueue.push({ time: 0, type: 'RECEIVE_MARKER', from: null, to: initiatorId, channelId: null });
+                
+                // Add events for all in-flight messages
+                messages.forEach(msg => {
+                    const arrivalTime = (1 - msg.progress) * 100; // Arbitrary time unit
+                    eventQueue.push({ time: arrivalTime, type: 'MESSAGE_ARRIVAL', message: msg });
+                });
+                
+                eventQueue.sort((a,b) => a.time - b.time);
+                
+                while(eventQueue.length > 0) {
+                    const event = eventQueue.shift();
+                    const vp = virtualProcesses[event.to] || virtualProcesses[event.message?.to];
+                    
+                    switch(event.type) {
+                        case 'RECEIVE_MARKER': {
+                            if (vp.markerReceived) { // Subsequent marker
+                                replayQueue.push({ type: 'STOP_RECORDING', from: event.from, to: event.to });
+                                vp.isRecording.set(event.channelId, false);
+                            } else { // First marker
+                                vp.markerReceived = true;
+                                replayQueue.push({ type: 'RECORD_STATE', processId: vp.id, state: initialStates[vp.id] });
+
+                                channels.forEach(channel => {
+                                    if (channel.to === vp.id) { // Incoming channels
+                                        if (channel.id !== event.channelId) {
+                                            vp.isRecording.set(channel.id, true);
+                                            replayQueue.push({ type: 'START_RECORDING', from: channel.from, to: channel.to });
+                                        }
+                                    }
+                                });
+                                
+                                channels.forEach(channel => {
+                                    if (channel.from === vp.id) { // Outgoing channels
+                                        replayQueue.push({ type: 'SEND_MARKER', from: vp.id, to: channel.to });
+                                        // Add marker arrival to the event queue
+                                        eventQueue.push({ time: event.time + 50, type: 'RECEIVE_MARKER', from: vp.id, to: channel.to, channelId: channel.id});
+                                    }
+                                });
+                            }
+                            break;
+                        }
+                        case 'MESSAGE_ARRIVAL': {
+                            const msg = event.message;
+                            if (vp.isRecording.get(msg.channelId)) {
+                                replayQueue.push({ type: 'RECORD_MESSAGE', from: msg.from, to: msg.to, channelId: msg.channelId });
+                            }
+                            // The virtual state still needs to be updated to correctly process later events.
+                            vp.state++;
+                            break;
+                        }
+                    }
+                    eventQueue.sort((a,b) => a.time - b.time);
+                }
+                replayQueue.push({ type: 'SNAPSHOT_COMPLETE' });
+            }
+
+            function createProcesses() {
+                 const positions = [ { x: 50, y: 15 }, { x: 20, y: 75 }, { x: 80, y: 75 }];
+                 for (let i = 0; i < processCount; i++) processes.push(new Process(i, positions[i].x, positions[i].y));
+            }
+
+            function createChannels() {
+                const connections = [[0, 1], [1, 0], [0, 2], [2, 0], [1, 2], [2, 1]];
+                connections.forEach(([from, to]) => {
+                    const id = `ch-${from}-${to}`;
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    line.setAttribute('class', 'channel-line');
+                    line.setAttribute('marker-end', 'url(#arrowhead)');
+                    svg.appendChild(line);
+                    channels.set(id, { id, from, to, line });
+                });
+                const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+                const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+                marker.setAttribute('id', 'arrowhead');
+                marker.setAttribute('viewBox', '0 -5 10 10');
+                marker.setAttribute('refX', 18); marker.setAttribute('refY', 0);
+                marker.setAttribute('markerWidth', 6); marker.setAttribute('markerHeight', 6);
+                marker.setAttribute('orient', 'auto');
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute('d', 'M0,-5L10,0L0,5');
+                path.setAttribute('fill', '#9ca3af');
+                marker.appendChild(path); defs.appendChild(marker); svg.appendChild(defs);
+                onResize();
+            }
+
+            // --- Replay Logic ---
+            
+            function applyStep(index) {
+                if (index < 0 || index >= replayQueue.length) return Promise.resolve();
+                
+                return new Promise(resolve => {
+                    const event = replayQueue[index];
+                    const p = event.processId !== undefined ? processes[event.processId] : processes[event.to];
+                    const channel = event.to !== undefined ? channels.get(`ch-${event.from}-${event.to}`) : null;
+
+                    switch (event.type) {
+                        case 'RECORD_STATE':
+                            p.el.classList.remove('border-cyan-500', 'bg-gray-700');
+                            p.el.classList.add('border-red-500', 'bg-red-900');
+                            collectedSnapshot.processStates.set(event.processId, event.state);
+                            logMessage(`P${p.id} records its state: ${event.state}.`, 'snapshot');
+                            updateSnapshotDisplay();
+                            resolve();
+                            break;
+                        case 'START_RECORDING':
+                            if (channel) {
+                                channel.line.classList.add('recording');
+                                collectedSnapshot.channelStates.set(channel.id, []);
+                            }
+                            logMessage(`P${event.to} starts recording on channel P${event.from}->P${event.to}.`);
+                            resolve();
+                            break;
+                        case 'SEND_MARKER':
+                            logMessage(`Marker sent from P${event.from} to P${event.to}.`, 'info');
+                            animateMarker(event.from, event.to).then(resolve);
+                            break;
+                        case 'STOP_RECORDING':
+                            if (channel) channel.line.classList.remove('recording');
+                            logMessage(`P${event.to} stops recording on channel P${event.from}->P${event.to}.`);
+                            resolve();
+                            break;
+                        case 'RECORD_MESSAGE':
+                            collectedSnapshot.channelStates.get(event.channelId).push('M');
+                            logMessage(`P${event.to} recorded in-flight message from P${event.from}.`, 'snapshot');
+                            updateSnapshotDisplay();
+                            animateInFlightMessage(event.from, event.to).then(resolve);
+                            break;
+                        case 'SNAPSHOT_COMPLETE':
+                            logMessage('Global snapshot complete!', 'success');
+                            updateSnapshotDisplay(true);
+                            resolve();
+                            break;
+                        default:
+                            resolve();
+                    }
+                });
+            }
+
+            function undoStep(index) {
+                if (index < 0 || index >= replayQueue.length) return;
+                
+                processes.forEach(proc => {
+                    proc.resetVisuals();
+                    proc.state = preSnapshotStates[proc.id].state;
+                    proc.updateStateDisplay();
+                });
+                logContainer.innerHTML = '';
+                snapshotContainer.innerHTML = '<p class="text-gray-500 italic">Replay in progress...</p>';
+                collectedSnapshot = { processStates: new Map(), channelStates: new Map() };
+
+                for (let i = 0; i < index; i++) {
+                    const event = replayQueue[i];
+                    const p = event.processId !== undefined ? processes[event.processId] : processes[event.to];
+                    const channel = event.to !== undefined ? channels.get(`ch-${event.from}-${event.to}`) : null;
+
+                    switch (event.type) {
+                        case 'RECORD_STATE':
+                            p.el.classList.remove('border-cyan-500', 'bg-gray-700');
+                            p.el.classList.add('border-red-500', 'bg-red-900');
+                            collectedSnapshot.processStates.set(event.processId, event.state);
+                            logMessage(`P${p.id} records state: ${event.state}.`, 'snapshot');
+                            break;
+                        case 'START_RECORDING':
+                            if (channel) {
+                                channel.line.classList.add('recording');
+                                collectedSnapshot.channelStates.set(channel.id, []);
+                            }
+                            logMessage(`P${event.to} starts recording on channel P${event.from}->P${event.to}.`);
+                            break;
+                        case 'SEND_MARKER':
+                            logMessage(`Marker sent from P${event.from} to P${event.to}.`, 'info');
+                            break;
+                        case 'STOP_RECORDING':
+                            if (channel) channel.line.classList.remove('recording');
+                            logMessage(`P${event.to} stops recording on channel P${event.from}->P${event.to}.`);
+                            break;
+                        case 'RECORD_MESSAGE':
+                            collectedSnapshot.channelStates.get(event.channelId).push('M');
+                            logMessage(`P${event.to} recorded in-flight message from P${event.from}.`, 'snapshot');
+                            break;
+                        case 'SNAPSHOT_COMPLETE':
+                            logMessage('Global snapshot complete!', 'success');
+                            break;
+                    }
+                }
+                updateSnapshotDisplay(index >= replayQueue.length-1);
+            }
+            
+            function updateReplayUI() {
+                stepCounter.textContent = `Step ${currentStep + 1} / ${replayQueue.length}`;
+                const isFirstStep = currentStep < 0;
+                const isLastStep = currentStep >= replayQueue.length - 1;
+                prevStepBtn.classList.toggle('btn-disabled', isFirstStep);
+                nextStepBtn.classList.toggle('btn-disabled', isLastStep);
+            }
+            
+            function toggleReplayButtons(disabled) {
+                prevStepBtn.disabled = disabled;
+                nextStepBtn.disabled = disabled;
+                exitReplayBtn.disabled = disabled;
+                prevStepBtn.classList.toggle('btn-disabled', disabled);
+                nextStepBtn.classList.toggle('btn-disabled', disabled);
+                exitReplayBtn.classList.toggle('btn-disabled', disabled);
+            }
+            
+            function animateInFlightMessage(fromId, toId) {
+                return new Promise(resolve => {
+                    const el = document.createElement('div');
+                    el.className = 'message';
+                    el.textContent = 'M';
+                    container.appendChild(el);
+
+                    const containerRect = container.getBoundingClientRect();
+                    const fromP = processes[fromId];
+                    const toP = processes[toId];
+                    const startX = fromP.pos.x * containerRect.width / 100;
+                    const startY = fromP.pos.y * containerRect.height / 100;
+                    const endX = toP.pos.x * containerRect.width / 100;
+                    const endY = toP.pos.y * containerRect.height / 100;
+                    
+                    let progress = 0;
+                    const duration = 500; // 0.5 second animation
+                    let startTime = null;
+                    
+                    toggleReplayButtons(true);
+
+                    function step(timestamp) {
+                        if (!startTime) startTime = timestamp;
+                        const elapsed = timestamp - startTime;
+                        progress = Math.min(elapsed / duration, 1);
+
+                        const currentX = startX + (endX - startX) * progress;
+                        const currentY = startY + (endY - startY) * progress;
+                        el.style.left = `${currentX}px`;
+                        el.style.top = `${currentY}px`;
+                        el.style.transform = 'translate(-50%, -50%)';
+
+                        if (progress < 1) {
+                            requestAnimationFrame(step);
+                        } else {
+                            el.remove();
+                            toggleReplayButtons(false);
+                            updateReplayUI();
+                            resolve();
+                        }
+                    }
+                    requestAnimationFrame(step);
+                });
+            }
+
+            function animateMarker(fromId, toId) {
+                return new Promise(resolve => {
+                    const el = document.createElement('div');
+                    el.className = 'marker';
+                    el.textContent = 'S';
+                    container.appendChild(el);
+
+                    const containerRect = container.getBoundingClientRect();
+                    const fromP = processes[fromId];
+                    const toP = processes[toId];
+                    const startX = fromP.pos.x * containerRect.width / 100;
+                    const startY = fromP.pos.y * containerRect.height / 100;
+                    const endX = toP.pos.x * containerRect.width / 100;
+                    const endY = toP.pos.y * containerRect.height / 100;
+                    
+                    let progress = 0;
+                    const duration = 500; // 0.5 second animation
+                    let startTime = null;
+                    
+                    toggleReplayButtons(true);
+
+                    function step(timestamp) {
+                        if (!startTime) startTime = timestamp;
+                        const elapsed = timestamp - startTime;
+                        progress = Math.min(elapsed / duration, 1);
+
+                        const currentX = startX + (endX - startX) * progress;
+                        const currentY = startY + (endY - startY) * progress;
+                        el.style.left = `${currentX}px`;
+                        el.style.top = `${currentY}px`;
+                        el.style.transform = 'translate(-50%, -50%)';
+
+                        if (progress < 1) {
+                            requestAnimationFrame(step);
+                        } else {
+                            el.remove();
+                            toggleReplayButtons(false);
+                            updateReplayUI(); // re-check button states
+                            resolve();
+                        }
+                    }
+                    requestAnimationFrame(step);
+                });
+            }
+
+            function updateSnapshotDisplay(isComplete = false) {
+                 snapshotContainer.innerHTML = '';
+                 const title = document.createElement('p');
+                 title.className = 'text-lg font-bold text-yellow-300 mb-2';
+                 title.textContent = `Snapshot #${snapshotId} (Initiated by P${snapshotInitiator})`;
+                 snapshotContainer.appendChild(title);
+                 
+                 // Display Process States
+                 collectedSnapshot.processStates.forEach((state, processId) => {
+                    const pStateDiv = document.createElement('div');
+                    pStateDiv.className = 'mb-1';
+                    pStateDiv.innerHTML = `<span class="font-semibold text-white">P${processId} State:</span> <span class="font-mono text-cyan-400">${state}</span>`;
+                    snapshotContainer.appendChild(pStateDiv);
+                 });
+                 
+                 // Display Channel States
+                 collectedSnapshot.channelStates.forEach((messages, channelId) => {
+                    const ch = channels.get(channelId);
+                    const chStateDiv = document.createElement('div');
+                    chStateDiv.className = 'ml-4 text-sm';
+                    const messageCount = messages.length;
+                    chStateDiv.innerHTML = `<span class="text-gray-400">Channel P${ch.from}->P${ch.to}:</span> <span class="font-mono text-blue-400">{${messageCount > 0 ? `${messageCount} message(s)` : 'empty'}}</span>`;
+                    snapshotContainer.appendChild(chStateDiv);
+                 });
+
+                 if(!isComplete) {
+                     const notice = document.createElement('p');
+                     notice.className = "text-gray-500 italic mt-4";
+                     notice.textContent = "Snapshot in progress...";
+                     snapshotContainer.appendChild(notice);
+                 }
+            }
+            
+            function exitReplay() {
+                isReplaying = false;
+                snapshotInProgress = false;
+                replayQueue = [];
+                currentStep = -1;
+
+                mainControls.classList.remove('hidden');
+                replayControls.classList.add('hidden');
+                toggleButton.classList.remove('btn-disabled');
+
+                processes.forEach(p => {
+                    const preState = preSnapshotStates[p.id];
+                    p.state = preState.state;
+                    p.updateStateDisplay();
+                    p.resetVisuals();
+                });
+                
+                // Restore visibility of live messages.
+                messages.forEach(msg => msg.el.style.display = 'flex');
+                logContainer.innerHTML = '';
+                snapshotContainer.innerHTML = '<p class="text-gray-500 italic">No snapshot taken yet.</p>';
+                logMessage('Exited replay mode. System reset.', 'info');
+            }
+
+            // --- Main Animation Loop ---
+
+            function createMessage(from, to) {
+                 if (!processes[from] || !processes[to]) return;
+                 const el = document.createElement('div');
+                 el.className = 'message';
+                 el.textContent = 'M';
+                 container.appendChild(el);
+                 messages.push({ id: messageIdCounter++, el, from, to, channelId: `ch-${from}-${to}`, progress: 0 });
+            }
+
+            function updateMessages() {
+                if (isReplaying) return;
+                const containerRect = container.getBoundingClientRect();
+                messages.forEach((msg, index) => {
+                    msg.progress += 0.01;
+                    const fromP = processes[msg.from]; const toP = processes[msg.to];
+                    const startX = fromP.pos.x * containerRect.width / 100;
+                    const startY = fromP.pos.y * containerRect.height / 100;
+                    const endX = toP.pos.x * containerRect.width / 100;
+                    const endY = toP.pos.y * containerRect.height / 100;
+                    msg.el.style.left = `${startX + (endX - startX) * msg.progress}px`;
+                    msg.el.style.top = `${startY + (endY - startY) * msg.progress}px`;
+                    msg.el.style.transform = 'translate(-50%, -50%)';
+
+                    if (msg.progress >= 1) {
+                        msg.el.remove();
+                        messages.splice(index, 1);
+                        toP.incrementState();
+                    }
+                });
+            }
+            
+            function logMessage(msg, type = 'info') {
+                const p = document.createElement('p');
+                let colorClass = 'text-gray-300';
+                if (type === 'snapshot') colorClass = 'text-yellow-400 font-semibold';
+                if (type === 'error') colorClass = 'text-red-400';
+                if (type === 'success') colorClass = 'text-green-400 font-bold';
+                p.className = `${colorClass} transition-opacity duration-300 opacity-0`;
+                setTimeout(()=> p.style.opacity = '1', 10);
+                const time = new Date().toLocaleTimeString();
+                p.innerHTML = `<span class="text-gray-500 mr-2">[${time}]</span> ${msg}`;
+                logContainer.appendChild(p);
+                logContainer.scrollTop = logContainer.scrollHeight;
+            }
+
+            function simulationLoop() {
+                if (Math.random() < 0.05 && simulationRunning && !isReplaying) {
+                    const from = Math.floor(Math.random() * processCount);
+                    let to;
+                    do { to = Math.floor(Math.random() * processCount); } while (to === from);
+                    createMessage(from, to);
+                }
+                updateMessages();
+                requestAnimationFrame(simulationLoop);
+            }
+            
+            function onResize() {
+                const containerRect = container.getBoundingClientRect();
+                 channels.forEach(channel => {
+                    const p1 = processes[channel.from]; const p2 = processes[channel.to];
+                    const x1 = p1.pos.x * containerRect.width / 100; const y1 = p1.pos.y * containerRect.height / 100;
+                    const x2 = p2.pos.x * containerRect.width / 100; const y2 = p2.pos.y * containerRect.height / 100;
+                    channel.line.setAttribute('x1', x1); channel.line.setAttribute('y1', y1);
+                    channel.line.setAttribute('x2', x2); channel.line.setAttribute('y2', y2);
+                 });
+            }
+
+            // --- Event Listeners ---
+            toggleButton.addEventListener('click', () => {
+                if (isReplaying) return;
+                simulationRunning = !simulationRunning;
+                toggleButton.textContent = simulationRunning ? 'Pause Simulation' : 'Start Simulation';
+                toggleButton.classList.toggle('bg-blue-600', !simulationRunning);
+                toggleButton.classList.toggle('hover:bg-blue-700', !simulationRunning);
+                toggleButton.classList.toggle('bg-yellow-600', simulationRunning);
+                toggleButton.classList.toggle('hover:bg-yellow-700', simulationRunning);
+            });
+            nextStepBtn.addEventListener('click', () => {
+                if(nextStepBtn.disabled) return;
+                if (currentStep < replayQueue.length - 1) {
+                    currentStep++;
+                    applyStep(currentStep).then(() => updateReplayUI());
+                }
+            });
+            prevStepBtn.addEventListener('click', () => {
+                if(prevStepBtn.disabled) return;
+                if (currentStep >= 0) {
+                    currentStep--;
+                    undoStep(currentStep + 1);
+                    updateReplayUI();
+                }
+            });
+            exitReplayBtn.addEventListener('click', exitReplay);
+            window.addEventListener('resize', onResize);
+
+            // Initialization
+            createProcesses();
+            createChannels();
+            simulationLoop();
+        });
+    </script>
+</body>
+</html>
+
+
