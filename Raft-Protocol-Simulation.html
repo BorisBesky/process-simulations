@@ -547,7 +547,16 @@ class RaftCluster {
 
         if (this.leaderId !== null && this.nodes[this.leaderId] && !this.nodes[this.leaderId].isDown) {
             // If there's a leader, a "step" means the leader sends heartbeats.
-            this.nodes[this.leaderId].sendHeartbeats();
+            const leader = this.nodes[this.leaderId];
+            this.renderer.updateExplanation(`
+                <p><strong>Leader ${leader.id} is sending heartbeats.</strong></p>
+                <ul>
+                    <li>These are AppendEntries RPCs sent to all followers to assert authority.</li>
+                    <li>Heartbeats reset follower election timers, preventing new elections.</li>
+                    <li>They also serve to replicate any new log entries to the followers.</li>
+                </ul>
+            `);
+            leader.sendHeartbeats();
         } else {
             // No leader. A "step" means the first election timeout fires.
             let earliestNode = null;
@@ -853,4 +862,3 @@ document.addEventListener('DOMContentLoaded', () => {
 </script>
 </body>
 </html>
-
