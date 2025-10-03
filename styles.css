@@ -80,6 +80,15 @@ body.bg-gray-900.overflow-hidden { overflow: hidden; }
     animation: dash-flow 1.5s linear infinite;
     z-index: 10; /* Ensure it's on top */
 }
+
+/* Snapshot resizer */
+#snapshot-resize-wrapper {
+    --snap-min: 120px;
+}
+#snapshot-container {
+    min-height: var(--snap-min);
+    height: 10rem; /* default 160px */
+}
 @keyframes dash-flow {
     from { stroke-dashoffset: 24; }
     to { stroke-dashoffset: 0; }

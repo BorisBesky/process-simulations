@@ -55,8 +55,14 @@
             </div>
 
             <h2 class="text-lg font-semibold mt-6 mb-2 text-cyan-400 border-b border-gray-600 pb-1">Global Snapshot</h2>
-            <div id="snapshot-container" class="bg-gray-900 rounded-md p-3 overflow-y-auto h-40">
-                <p class="text-gray-500 italic">No snapshot taken yet.</p>
+            <div id="snapshot-resize-wrapper" class="relative flex flex-col rounded-md bg-gray-900 border border-gray-800">
+                <!-- Top drag handle -->
+                <div id="snapshot-resize-handle-top" class="h-3 cursor-row-resize flex items-center justify-center select-none group rounded-t-md">
+                    <div class="w-10 h-1 rounded bg-gray-600 group-hover:bg-gray-400 transition-colors"></div>
+                </div>
+                <div id="snapshot-container" class="rounded-md p-3 overflow-y-auto">
+                    <p class="text-gray-500 italic">No snapshot taken yet.</p>
+                </div>
             </div>
         </div>
     </div>
@@ -68,6 +74,8 @@
             const svg = document.getElementById('channel-svg');
             const logContainer = document.getElementById('log-container');
             const snapshotContainer = document.getElementById('snapshot-container');
+            const snapshotWrapper = document.getElementById('snapshot-resize-wrapper');
+            const snapshotHandleTop = document.getElementById('snapshot-resize-handle-top');
             const toggleButton = document.getElementById('toggle-simulation');
             const mainControls = document.getElementById('main-controls');
             const replayControls = document.getElementById('replay-controls');
@@ -94,6 +102,47 @@
             let currentStep = -1;
             let preSnapshotStates = {};
             let collectedSnapshot = {};
+            let resizingSnapshot = false;
+            let resizingFromTop = false;
+            let snapshotStartY = 0;
+            let snapshotStartHeight = 0;
+            const SNAP_MIN = 120; // px
+            const SNAP_MAX = 500; // px
+            const SNAP_STORAGE_KEY = 'chla_snapshot_height_v1';
+
+            function applyStoredSnapshotHeight() {
+                const stored = localStorage.getItem(SNAP_STORAGE_KEY);
+                if (stored) {
+                    const h = Math.min(SNAP_MAX, Math.max(SNAP_MIN, parseInt(stored, 10)));
+                    snapshotContainer.style.height = h + 'px';
+                }
+            }
+
+            function beginSnapshotResize(e, fromTop) {
+                resizingSnapshot = true;
+                resizingFromTop = !!fromTop;
+                snapshotStartY = e.clientY;
+                snapshotStartHeight = snapshotContainer.getBoundingClientRect().height;
+                document.body.classList.add('select-none');
+            }
+
+            function performSnapshotResize(e) {
+                if (!resizingSnapshot) return;
+                const delta = e.clientY - snapshotStartY;
+                // If resizing from the top, invert the delta so dragging up increases height
+                const effectiveDelta = resizingFromTop ? -delta : delta;
+                let newHeight = snapshotStartHeight + effectiveDelta;
+                newHeight = Math.max(SNAP_MIN, Math.min(SNAP_MAX, newHeight));
+                snapshotContainer.style.height = newHeight + 'px';
+            }
+
+            function endSnapshotResize() {
+                if (!resizingSnapshot) return;
+                resizingSnapshot = false;
+                document.body.classList.remove('select-none');
+                const h = snapshotContainer.getBoundingClientRect().height;
+                localStorage.setItem(SNAP_STORAGE_KEY, Math.round(h));
+            }
 
 
             class Process {
@@ -655,6 +704,7 @@
                 
                 logContainer.innerHTML = '';
                 snapshotContainer.innerHTML = '<p class="text-gray-500 italic">No snapshot taken yet.</p>';
+                applyStoredSnapshotHeight();
                 mainControls.classList.remove('hidden');
                 replayControls.classList.add('hidden');
 
@@ -698,6 +748,13 @@
             // Initialization
             resetAndSetupSimulation();
             simulationLoop();
+
+            // --- Snapshot resize events ---
+            snapshotHandleTop.addEventListener('mousedown', (e) => beginSnapshotResize(e, true));
+            window.addEventListener('mousemove', performSnapshotResize);
+            window.addEventListener('mouseup', endSnapshotResize);
+            window.addEventListener('mouseleave', endSnapshotResize);
+            applyStoredSnapshotHeight();
         });
     </script>
 </body>
