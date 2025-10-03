@@ -76,6 +76,15 @@
             <p class="text-sm text-gray-400 text-center mb-6">A distributed algorithm to capture a consistent global state.</p>
             
             <div id="main-controls">
+                <div class="mb-4">
+                    <label for="node-count-selector" class="block text-sm font-medium text-gray-400 text-center mb-2">Number of Processes:</label>
+                    <select id="node-count-selector" class="bg-gray-700 border border-gray-600 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                        <option value="2">2</option>
+                        <option value="3" selected>3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                    </select>
+                </div>
                 <div class="flex justify-center mb-4">
                     <button id="toggle-simulation" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition-colors w-full">Start Simulation</button>
                 </div>
@@ -120,6 +129,7 @@
             const nextStepBtn = document.getElementById('next-step');
             const exitReplayBtn = document.getElementById('exit-replay');
             const stepCounter = document.getElementById('step-counter');
+            const nodeCountSelector = document.getElementById('node-count-selector');
 
             // --- State Variables ---
             let processCount = 3;
@@ -201,13 +211,13 @@
                     simulationRunning = false;
                     toggleButton.textContent = 'Simulation Paused';
                     toggleButton.classList.add('btn-disabled');
+                    nodeCountSelector.disabled = true;
 
                     mainControls.classList.add('hidden');
                     replayControls.classList.remove('hidden');
                     
                     logContainer.innerHTML = '';
                     snapshotContainer.innerHTML = '<p class="text-gray-500 italic">Replay in progress...</p>';
-                    // Hide live messages instead of just fading them to avoid confusion.
                     messages.forEach(msg => msg.el.style.display = 'none');
 
                     processes.forEach(p => preSnapshotStates[p.id] = { state: p.state });
@@ -229,27 +239,23 @@
             function buildReplayQueue(initiatorId) {
                 replayQueue = [];
                 let virtualProcesses = {};
-                const initialStates = {}; // Store states at the moment snapshot is initiated
+                const initialStates = {};
 
-                // 1. Create a deep copy of the current system state
                 processes.forEach(p => {
-                    initialStates[p.id] = p.state; // Capture state at t0
+                    initialStates[p.id] = p.state;
                     virtualProcesses[p.id] = {
                         id: p.id,
-                        state: p.state, // This virtual state will evolve, but we'll record from initialStates
+                        state: p.state,
                         markerReceived: false,
                         isRecording: new Map(),
                     };
                 });
 
                 let eventQueue = [];
-
-                // Add snapshot initiation event
                 eventQueue.push({ time: 0, type: 'RECEIVE_MARKER', from: null, to: initiatorId, channelId: null });
                 
-                // Add events for all in-flight messages
                 messages.forEach(msg => {
-                    const arrivalTime = (1 - msg.progress) * 100; // Arbitrary time unit
+                    const arrivalTime = (1 - msg.progress) * 100;
                     eventQueue.push({ time: arrivalTime, type: 'MESSAGE_ARRIVAL', message: msg });
                 });
                 
@@ -261,15 +267,15 @@
                     
                     switch(event.type) {
                         case 'RECEIVE_MARKER': {
-                            if (vp.markerReceived) { // Subsequent marker
+                            if (vp.markerReceived) {
                                 replayQueue.push({ type: 'STOP_RECORDING', from: event.from, to: event.to });
                                 vp.isRecording.set(event.channelId, false);
-                            } else { // First marker
+                            } else {
                                 vp.markerReceived = true;
                                 replayQueue.push({ type: 'RECORD_STATE', processId: vp.id, state: initialStates[vp.id] });
 
                                 channels.forEach(channel => {
-                                    if (channel.to === vp.id) { // Incoming channels
+                                    if (channel.to === vp.id) {
                                         if (channel.id !== event.channelId) {
                                             vp.isRecording.set(channel.id, true);
                                             replayQueue.push({ type: 'START_RECORDING', from: channel.from, to: channel.to });
@@ -278,10 +284,9 @@
                                 });
                                 
                                 channels.forEach(channel => {
-                                    if (channel.from === vp.id) { // Outgoing channels
+                                    if (channel.from === vp.id) {
                                         replayQueue.push({ type: 'SEND_MARKER', from: vp.id, to: channel.to });
-                                        // Add marker arrival to the event queue
-                                        eventQueue.push({ time: event.time + 50, type: 'RECEIVE_MARKER', from: vp.id, to: channel.to, channelId: channel.id});
+                                        eventQueue.push({ time: event.time + 50, type: 'RECEIVE_MARKER', from: vp.id, to: channel.to, channelId: `ch-${vp.id}-${channel.to}`});
                                     }
                                 });
                             }
@@ -292,7 +297,6 @@
                             if (vp.isRecording.get(msg.channelId)) {
                                 replayQueue.push({ type: 'RECORD_MESSAGE', from: msg.from, to: msg.to, channelId: msg.channelId });
                             }
-                            // The virtual state still needs to be updated to correctly process later events.
                             vp.state++;
                             break;
                         }
@@ -303,12 +307,26 @@
             }
 
             function createProcesses() {
-                 const positions = [ { x: 50, y: 15 }, { x: 20, y: 75 }, { x: 80, y: 75 }];
-                 for (let i = 0; i < processCount; i++) processes.push(new Process(i, positions[i].x, positions[i].y));
+                const layouts = {
+                    2: [{ x: 30, y: 50 }, { x: 70, y: 50 }],
+                    3: [{ x: 50, y: 15 }, { x: 20, y: 75 }, { x: 80, y: 75 }],
+                    4: [{ x: 25, y: 25 }, { x: 75, y: 25 }, { x: 25, y: 75 }, { x: 75, y: 75 }],
+                    5: [{ x: 50, y: 15 }, { x: 15, y: 45 }, { x: 85, y: 45 }, { x: 30, y: 85 }, { x: 70, y: 85 }]
+                };
+                const positions = layouts[processCount];
+                for (let i = 0; i < processCount; i++) {
+                    processes.push(new Process(i, positions[i].x, positions[i].y));
+                }
             }
 
             function createChannels() {
-                const connections = [[0, 1], [1, 0], [0, 2], [2, 0], [1, 2], [2, 1]];
+                const connections = [];
+                for(let i=0; i < processCount; i++) {
+                    for(let j=0; j < processCount; j++) {
+                        if (i !== j) connections.push([i,j]);
+                    }
+                }
+
                 connections.forEach(([from, to]) => {
                     const id = `ch-${from}-${to}`;
                     const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -317,6 +335,7 @@
                     svg.appendChild(line);
                     channels.set(id, { id, from, to, line });
                 });
+
                 const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
                 const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
                 marker.setAttribute('id', 'arrowhead');
@@ -467,7 +486,7 @@
                     const endY = toP.pos.y * containerRect.height / 100;
                     
                     let progress = 0;
-                    const duration = 500; // 0.5 second animation
+                    const duration = 500;
                     let startTime = null;
                     
                     toggleReplayButtons(true);
@@ -512,7 +531,7 @@
                     const endY = toP.pos.y * containerRect.height / 100;
                     
                     let progress = 0;
-                    const duration = 500; // 0.5 second animation
+                    const duration = 500;
                     let startTime = null;
                     
                     toggleReplayButtons(true);
@@ -533,7 +552,7 @@
                         } else {
                             el.remove();
                             toggleReplayButtons(false);
-                            updateReplayUI(); // re-check button states
+                            updateReplayUI();
                             resolve();
                         }
                     }
@@ -548,7 +567,6 @@
                  title.textContent = `Snapshot #${snapshotId} (Initiated by P${snapshotInitiator})`;
                  snapshotContainer.appendChild(title);
                  
-                 // Display Process States
                  collectedSnapshot.processStates.forEach((state, processId) => {
                     const pStateDiv = document.createElement('div');
                     pStateDiv.className = 'mb-1';
@@ -556,7 +574,6 @@
                     snapshotContainer.appendChild(pStateDiv);
                  });
                  
-                 // Display Channel States
                  collectedSnapshot.channelStates.forEach((messages, channelId) => {
                     const ch = channels.get(channelId);
                     const chStateDiv = document.createElement('div');
@@ -583,6 +600,7 @@
                 mainControls.classList.remove('hidden');
                 replayControls.classList.add('hidden');
                 toggleButton.classList.remove('btn-disabled');
+                nodeCountSelector.disabled = false;
 
                 processes.forEach(p => {
                     const preState = preSnapshotStates[p.id];
@@ -591,14 +609,11 @@
                     p.resetVisuals();
                 });
                 
-                // Restore visibility of live messages.
                 messages.forEach(msg => msg.el.style.display = 'flex');
                 logContainer.innerHTML = '';
                 snapshotContainer.innerHTML = '<p class="text-gray-500 italic">No snapshot taken yet.</p>';
                 logMessage('Exited replay mode. System reset.', 'info');
             }
-
-            // --- Main Animation Loop ---
 
             function createMessage(from, to) {
                  if (!processes[from] || !processes[to]) return;
@@ -666,6 +681,34 @@
                     channel.line.setAttribute('x2', x2); channel.line.setAttribute('y2', y2);
                  });
             }
+            
+            function resetAndSetupSimulation() {
+                simulationRunning = false;
+                toggleButton.textContent = 'Start Simulation';
+                toggleButton.classList.remove('bg-yellow-600', 'hover:bg-yellow-700');
+                toggleButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                nodeCountSelector.disabled = false;
+
+                processes.forEach(p => p.el.remove());
+                messages.forEach(msg => msg.el.remove());
+                if (svg.firstElementChild) svg.innerHTML = '';
+
+                processes = [];
+                messages = [];
+                channels.clear();
+                messageIdCounter = 0;
+                snapshotInProgress = false;
+                isReplaying = false;
+                
+                logContainer.innerHTML = '';
+                snapshotContainer.innerHTML = '<p class="text-gray-500 italic">No snapshot taken yet.</p>';
+                mainControls.classList.remove('hidden');
+                replayControls.classList.add('hidden');
+
+                processCount = parseInt(nodeCountSelector.value, 10);
+                createProcesses();
+                createChannels();
+            }
 
             // --- Event Listeners ---
             toggleButton.addEventListener('click', () => {
@@ -676,7 +719,11 @@
                 toggleButton.classList.toggle('hover:bg-blue-700', !simulationRunning);
                 toggleButton.classList.toggle('bg-yellow-600', simulationRunning);
                 toggleButton.classList.toggle('hover:bg-yellow-700', simulationRunning);
+                nodeCountSelector.disabled = simulationRunning;
             });
+
+            nodeCountSelector.addEventListener('change', resetAndSetupSimulation);
+
             nextStepBtn.addEventListener('click', () => {
                 if(nextStepBtn.disabled) return;
                 if (currentStep < replayQueue.length - 1) {
@@ -696,12 +743,10 @@
             window.addEventListener('resize', onResize);
 
             // Initialization
-            createProcesses();
-            createChannels();
+            resetAndSetupSimulation();
             simulationLoop();
         });
     </script>
 </body>
 </html>
-
 
