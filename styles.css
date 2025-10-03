@@ -1,0 +1,129 @@
+/* Shared styles extracted from Chandy-Lambert and Raft simulation pages
+   - Scoped to avoid class name collisions between simulations
+   - Use #visualization-container for Chandy-Lambert
+   - Use #visualization-area for Raft
+*/
+
+/* Global base */
+body { font-family: 'Inter', sans-serif; }
+.btn-disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Page-specific small overrides */
+/* Chandy-Lambert page wants overflow hidden for the body */
+body.bg-gray-900.overflow-hidden { overflow: hidden; }
+
+/* Raft page uses overflow-hidden on some containers; ensure consistent behavior */
+.overflow-hidden { overflow: hidden; }
+
+/* Button styles modeled after Raft page (Tailwind-like) */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem; /* py-2 px-4 */
+    border-radius: 0.5rem; /* rounded-lg */
+    font-weight: 600;
+    text-decoration: none;
+    border: 0;
+    transition: background-color 150ms ease, transform 60ms ease;
+    cursor: pointer;
+}
+.btn.primary {
+    background-color: #2563eb; /* blue-600 */
+    color: white;
+}
+.btn.primary:hover { background-color: #1d4ed8; /* blue-700 */ }
+.btn.secondary {
+    background-color: #374151; /* gray-700 */
+    color: white;
+}
+.btn.secondary:hover { background-color: #2d3748; }
+.btn.ghost {
+    background: transparent; color: var(--muted); border-radius: 0.5rem;
+}
+
+/* -------------------- Chandy-Lambert (scoped) -------------------- */
+#visualization-container .process {
+    transition: background-color 0.5s ease, border-color 0.5s ease;
+}
+#visualization-container .message, #visualization-container .marker {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: white;
+    transition: all 0.1s linear, opacity 0.3s ease;
+    opacity: 1;
+    border-radius: 50%;
+}
+#visualization-container .message {
+    width: 20px;
+    height: 20px;
+    background-color: #3b82f6; /* blue-500 */
+}
+#visualization-container .marker {
+    background-color: #ef4444; /* red-500 */
+    width: 25px; height: 25px; font-size: 12px; font-weight: bold; z-index: 10;
+}
+
+#channel-svg .channel-line {
+    stroke: #9ca3af; /* gray-400 */
+    stroke-width: 2;
+    transition: stroke 0.3s ease;
+}
+#channel-svg .channel-line.recording {
+    stroke: #f59e0b; /* amber-500 */
+    stroke-dasharray: 5, 5;
+    animation: dash-flow 1s linear infinite;
+}
+@keyframes dash-flow {
+    from { stroke-dashoffset: 100; }
+    to { stroke-dashoffset: 0; }
+}
+
+/* -------------------- Raft (scoped) -------------------- */
+#visualization-area .node {
+    transition: background-color 0.3s ease, border-color 0.3s ease, transform 0.2s ease;
+    cursor: pointer;
+}
+#visualization-area .node.follower { background-color: #60a5fa; border-color: #2563eb; }
+#visualization-area .node.candidate { background-color: #facc15; border-color: #ca8a04; }
+#visualization-area .node.leader { background-color: #4ade80; border-color: #16a34a; }
+#visualization-area .node.down { background-color: #f87171; border-color: #dc2626; opacity: 0.6; }
+
+#visualization-area .message {
+    position: absolute;
+    padding: 4px 8px;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: white;
+    z-index: 10;
+    transition: transform 0.5s ease-out, opacity 0.5s ease-out;
+    transform-origin: center;
+}
+#visualization-area .message.vote-request { background-color: #fb923c; }
+#visualization-area .message.vote-response { background-color: #f97316; }
+#visualization-area .message.append-request { background-color: #22d3ee; }
+#visualization-area .message.append-response { background-color: #06b6d4; }
+
+#explanation-container .explanation-entry { padding: 0.5rem 0; }
+#visualization-area .log-entry { transition: background-color 0.3s ease; }
+#visualization-area .log-entry.committed { background-color: #15803d; color: #f0fdf4; }
+
+/* Utility used by multiple pages */
+.text-muted { color: #94a3b8; }
+.card { background: linear-gradient(180deg,#0b1220, rgba(11,18,32,0.6)); border-radius:12px; padding:18px; border:1px solid rgba(255,255,255,0.04); }
+
+/* Raft specific helper sizes previously inline */
+.raft-vis-height { height: 600px; }
+.explanation-height { height: 150px; }
+
+/* Make visualization and control panels match height on large screens */
+@media (min-width: 1024px) {
+    .match-vis-height { height: 90vh; }
+}
+
+/* End of shared styles */
