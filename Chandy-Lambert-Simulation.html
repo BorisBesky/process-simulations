@@ -14,13 +14,12 @@
     <!-- Main Visualization Area -->
     <div class="flex-grow bg-gray-800 rounded-lg relative overflow-hidden shadow-2xl match-vis-height" id="visualization-container">
             <svg id="channel-svg" class="absolute top-0 left-0 w-full h-full"></svg>
-        </div>
+    </div>
 
-        <!-- Control and Log Panel -->
+    <!-- Control and Log Panel -->
     <div class="lg:w-1/3 w-full bg-gray-800 rounded-lg p-6 flex flex-col shadow-2xl h-full lg:max-h-[90vh] match-vis-height">
             <h1 class="text-2xl font-bold text-center mb-4 text-cyan-400">Chandy-Lambert Snapshot</h1>
             <p class="text-sm text-gray-400 text-center mb-6">A distributed algorithm to capture a consistent global state.</p>
-            <p class="text-sm text-gray-400 text-center mb-6">Click any process node to record a snapshot of the system state.</p>
             
             <div id="main-controls">
                 <div class="mb-4">
